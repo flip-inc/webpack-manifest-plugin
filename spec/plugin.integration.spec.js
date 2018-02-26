@@ -1,16 +1,16 @@
-var fse = require('fs-extra');
-var path = require('path');
+const fse = require('fs-extra');
+const path = require('path');
 
-var _ = require('lodash');
-var webpack = require('webpack');
-var MemoryFileSystem = require('memory-fs');
-var rimraf = require('rimraf');
+const _ = require('lodash');
+const webpack = require('webpack');
+const MemoryFileSystem = require('memory-fs');
+const rimraf = require('rimraf');
 
-var ManifestPlugin = require('../index.js');
+const ManifestPlugin = require('../index.js');
 
 jasmine.DEFAULT_TIMEOUT_INTERVAL = 5 * 60 * 1000;
 
-var isCI = (yes, no) => process.env.CI === 'true' ? yes : no;
+const isCI = (yes, no) => process.env.CI === 'true' ? yes : no;
 
 function webpackConfig(webpackOpts, opts) {
   return _.merge({
@@ -21,14 +21,14 @@ function webpackConfig(webpackOpts, opts) {
 }
 
 function webpackCompile(config, compilerOps, cb) {
-  var compiler = webpack(config);
+  let compiler = webpack(config);
 
   _.assign(compiler, compilerOps);
 
   compiler.watch({
     aggregateTimeout: 300,
     poll: true
-  }, function(err, stats){
+  }, (err, stats) => {
     expect(err).toBeFalsy();
     expect(stats.hasErrors()).toBe(false);
 
@@ -36,13 +36,13 @@ function webpackCompile(config, compilerOps, cb) {
   });
 };
 
-describe('ManifestPlugin using real fs', function() {
-  beforeEach(function() {
+describe('ManifestPlugin using real fs', () => {
+  beforeEach(() => {
     rimraf.sync(path.join(__dirname, 'output/single-file'));
   });
 
-  describe('basic behavior', function() {
-    it('outputs a manifest of one file', function(done) {
+  describe('basic behavior', () => {
+    it('outputs a manifest of one file', done => {
       webpackCompile({
         context: __dirname,
         output: {
@@ -53,8 +53,8 @@ describe('ManifestPlugin using real fs', function() {
         plugins: [
           new ManifestPlugin()
         ]
-      }, {}, function() {
-        var manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/single-file/manifest.json')))
+      }, {}, () => {
+        const manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/single-file/manifest.json')))
 
         expect(manifest).toBeDefined();
         expect(manifest).toEqual({
@@ -65,21 +65,27 @@ describe('ManifestPlugin using real fs', function() {
       });
     });
 
-    it('exposes a plugin hook with the manifest content', function (done) {
+    it('exposes a plugin hook with the manifest content', done => {
       function TestPlugin() {
         this.manifest = null;
       }
-      TestPlugin.prototype.apply = function (compiler) {
-        var self = this;
-        compiler.plugin('compilation', function (compilation) {
-          compilation.plugin('webpack-manifest-plugin-after-emit', function (manifest, callback) {
-            self.manifest = manifest;
-            callback();
+      TestPlugin.prototype.apply = function(compiler) {
+        const callback = (manifest, callback) => {
+          this.manifest = manifest;
+          callback();
+        }
+        if (compiler.hooks) {
+          compiler.hooks.compilation.tap('ManifestPlugin', compilation => {
+            compilation.hooks.webpackManifestPluginAfterEmit.tap('ManifestPlugin', callback);
+          })
+        } else {
+          compiler.plugin('compilation', compilation => {
+            compilation.plugin('webpack-manifest-plugin-after-emit', callback);
           });
-        });
+        }
       };
 
-      var testPlugin = new TestPlugin();
+      const testPlugin = new TestPlugin();
       webpackCompile({
         context: __dirname,
         output: {
@@ -91,7 +97,7 @@ describe('ManifestPlugin using real fs', function() {
           new ManifestPlugin(),
           testPlugin
         ]
-      }, {}, function() {
+      }, {}, () => {
         expect(testPlugin.manifest).toBeDefined();
         expect(testPlugin.manifest).toEqual({
           'main.js': 'main.js'
@@ -102,15 +108,15 @@ describe('ManifestPlugin using real fs', function() {
     });
   });
 
-  describe('watch mode', function() {
-    var hashes;
+  describe('watch mode', () => {
+    let hashes;
 
-    beforeAll(function () {
+    beforeAll(() => {
       fse.outputFileSync(path.join(__dirname, 'output/watch-mode/index.js'), 'console.log(\'v1\')');
       hashes = [];
     });
 
-    it('outputs a manifest of one file', function(done) {
+    it('outputs a manifest of one file', done => {
       webpackCompile({
         context: __dirname,
         output: {
@@ -123,8 +129,8 @@ describe('ManifestPlugin using real fs', function() {
           new ManifestPlugin(),
           new webpack.HotModuleReplacementPlugin()
         ]
-      }, {}, function(stats) {
-        var manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/watch-mode/manifest.json')))
+      }, {}, stats => {
+        const manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/watch-mode/manifest.json')))
 
         expect(manifest).toBeDefined();
         expect(manifest).toEqual({
@@ -143,15 +149,15 @@ describe('ManifestPlugin using real fs', function() {
     });
   });
 
-  describe('multiple compilation', function() {
-    var nbCompiler = isCI(4000, 1000);
-    var originalTimeout;
-    beforeEach(function() {
+  describe('multiple compilation', () => {
+    const nbCompiler = isCI(4000, 1000);
+    let originalTimeout;
+    beforeEach(() => {
       rimraf.sync(path.join(__dirname, 'output/multiple-compilation'));
     });
 
-    it('should not produce mangle output', function(done) {
-      var seed = {};
+    it('should not produce mangle output', done => {
+      let seed = {};
 
       webpackCompile(Array.from({length: nbCompiler}).map((x, i) => ({
         context: __dirname,
@@ -167,16 +173,21 @@ describe('ManifestPlugin using real fs', function() {
             seed
           }),
           function () {
-            var compiler = this;
-
-            compiler.plugin('after-emit', function(compilation, cb) {
-              JSON.parse(fse.readFileSync(path.join(__dirname, 'output/multiple-compilation/manifest.json')));
-              cb();
-            });
+            const compiler = this;
+            if (compiler.hooks) {
+              compiler.hooks.afterEmit.tap('ManifestPlugin', compilation => {
+                JSON.parse(fse.readFileSync(path.join(__dirname, 'output/multiple-compilation/manifest.json')));
+              })
+            } else {
+              compiler.plugin('after-emit', (compilation, cb) => {
+                JSON.parse(fse.readFileSync(path.join(__dirname, 'output/multiple-compilation/manifest.json')));
+                cb();
+              });
+            }
           }
         ]
-      })), {}, function() {
-        var manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/multiple-compilation/manifest.json')))
+      })), {}, () => {
+        const manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/multiple-compilation/manifest.json')))
 
         expect(manifest).toBeDefined();
         expect(manifest).toEqual(Array.from({length: nbCompiler}).reduce((manifest, x, i) => {
@@ -190,13 +201,13 @@ describe('ManifestPlugin using real fs', function() {
     });
   });
 
-  describe('set location of manifest', function() {
-    describe('using relative path', function() {
-      beforeEach(function() {
+  describe('set location of manifest', () => {
+    describe('using relative path', () => {
+      beforeEach(() => {
         rimraf.sync(path.join(__dirname, 'output/relative-manifest'));
       });
 
-      it('should use output to the correct location', function(done) {
+      it('should use output to the correct location', done => {
         webpackCompile({
           context: __dirname,
           entry: './fixtures/file.js',
@@ -209,10 +220,10 @@ describe('ManifestPlugin using real fs', function() {
               fileName: 'webpack.manifest.js',
             })
           ]
-        }, {}, function(manifest, stats, fs) {
-          var manifestPath = path.join(__dirname, 'output/relative-manifest', 'webpack.manifest.js');
+        }, {}, (manifest, stats, fs) => {
+          const manifestPath = path.join(__dirname, 'output/relative-manifest', 'webpack.manifest.js');
 
-          var manifest = JSON.parse(fse.readFileSync(manifestPath).toString());
+          manifest = JSON.parse(fse.readFileSync(manifestPath).toString());
 
           expect(manifest).toEqual({
             'main.js': 'main.js'
@@ -223,12 +234,12 @@ describe('ManifestPlugin using real fs', function() {
       });
     });
 
-    describe('using absolute path', function() {
-      beforeEach(function() {
+    describe('using absolute path', () => {
+      beforeEach(() => {
         rimraf.sync(path.join(__dirname, 'output/absolute-manifest'));
       });
 
-      it('should use output to the correct location', function(done) {
+      it('should use output to the correct location', done => {
         webpackCompile({
           context: __dirname,
           entry: './fixtures/file.js',
@@ -241,10 +252,10 @@ describe('ManifestPlugin using real fs', function() {
               fileName: path.join(__dirname, 'output/absolute-manifest', 'webpack.manifest.js')
             })
           ]
-        }, {}, function(manifest, stats, fs) {
-          var manifestPath = path.join(__dirname, 'output/absolute-manifest', 'webpack.manifest.js');
+        }, {}, (manifest, stats, fs) => {
+          const manifestPath = path.join(__dirname, 'output/absolute-manifest', 'webpack.manifest.js');
 
-          var manifest = JSON.parse(fse.readFileSync(manifestPath).toString());
+          manifest = JSON.parse(fse.readFileSync(manifestPath).toString());
 
           expect(manifest).toEqual({
             'main.js': 'main.js'
@@ -257,13 +268,13 @@ describe('ManifestPlugin using real fs', function() {
   });
 });
 
-describe('ManifestPlugin with memory-fs', function() {
-  describe('writeToFileEmit', function() {
-    beforeEach(function() {
+describe('ManifestPlugin with memory-fs', () => {
+  describe('writeToFileEmit', () => {
+    beforeEach(() => {
       rimraf.sync(path.join(__dirname, 'output/emit'));
     });
 
-    it('outputs a manifest of one file', function(done) {
+    it('outputs a manifest of one file', done => {
       webpackCompile({
         context: __dirname,
         output: {
@@ -278,8 +289,8 @@ describe('ManifestPlugin with memory-fs', function() {
         ]
       }, {
         outputFileSystem: new MemoryFileSystem()
-      }, function() {
-        var manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/emit/manifest.json')))
+      }, () => {
+        const manifest = JSON.parse(fse.readFileSync(path.join(__dirname, 'output/emit/manifest.json')))
 
         expect(manifest).toBeDefined();
         expect(manifest).toEqual({

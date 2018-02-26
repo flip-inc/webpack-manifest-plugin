@@ -9,7 +9,7 @@
   "author": "Dane Thurber <dane.thurber@gmail.com>",
   "license": "MIT",
   "engines": {
-    "node": ">=4"
+    "node": ">=6.5.0"
   },
   "peerDependencies": {
     "webpack": "2 || 3 || 4"
@@ -41,7 +41,8 @@
   "dependencies": {
     "fs-extra": "^0.30.0",
     "lodash": ">=3.5 <5",
-    "mutexify": "1.0.1"
+    "mutexify": "1.0.1",
+    "tapable": "^1.0.0"
   },
   "nyc": {
     "reporter": [
